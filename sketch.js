@@ -14,7 +14,7 @@ function preload() {
 
 function setup() {
   // 连接到当前的服务器
-  socket = io(); 
+  socket = io();
 
   // 监听来自其他人的烟花
   socket.on('firework_blast', (data) => {
@@ -22,7 +22,7 @@ function setup() {
     // 注意：这里需要确保 launchFirework 不会再次向外 emit，避免死循环
     receiveRemoteFirework(data.x, data.y, data.hu);
   });
-  
+
   // 1. 全屏显示
   createCanvas(windowWidth, windowHeight);
   colorMode(HSB);
@@ -30,7 +30,7 @@ function setup() {
   stroke(255);
   strokeWeight(4);
   background(0);
-  
+
   // 初始提示文字
   textAlign(CENTER, CENTER);
   fill(255);
@@ -47,8 +47,8 @@ function draw() {
   if (!started) return; // 未点击前不更新逻辑
 
   // 黑色背景带拖影效果 (Alpha 控制)
-  background(0, 0, 0, 0.2); 
-  
+  background(0, 0, 0, 0.2);
+
   // 倒序遍历，方便删除已消失的烟花
   for (let i = fireworks.length - 1; i >= 0; i--) {
     fireworks[i].update();
@@ -60,23 +60,26 @@ function draw() {
 }
 
 // 核心发射函数：处理震动、声音、视觉和通信
+// 核心发射函数：处理震动、声音、视觉和通信
 function launchFirework(x, y) {
-  // 1. 本地逻辑
-  if (!started) { started = true; userStartAudio(); }
+  // 1. 初始化逻辑
+  if (!started) { 
+    started = true; 
+    userStartAudio(); 
+  }
+  
   let hu = random(360);
   fireworks.push(new Firework(x, y, hu));
 
-  // 2. 播放声音（随机选择两个音效之一）
+  // --- 关键修复：为你自己的烟花添加声音播放 ---
   const randomSound = random() > 0.5 ? fireworkSound1 : fireworkSound2;
-  if (randomSound.isLoaded()) { randomSound.play(); }
-
-  // 3. 发送到服务器
-  socket.emit('firework', { x: x, y: y, hu: hu });
-
-  // 4. 震动反馈 (Android 兼容)
-  if (navigator.vibrate) {
-    navigator.vibrate(50);
+  if (randomSound.isLoaded()) { 
+    randomSound.play(); 
   }
+  // ---------------------------------------
+
+  // 2. 发送到服务器
+  socket.emit('firework', { x: x, y: y, hu: hu });
 }
 
 // 新增：专门处理远程同步的函数（不带 emit）
