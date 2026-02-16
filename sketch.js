@@ -59,26 +59,30 @@ function draw() {
   }
 }
 
-// 核心发射函数：处理震动、声音、视觉和通信
-// 核心发射函数：处理震动、声音、视觉和通信
+// 修改后的发射函数：根据点击高度动态计算速度
 function launchFirework(x, y) {
-  // 1. 初始化逻辑
-  if (!started) { 
-    started = true; 
-    userStartAudio(); 
+  if (!started) {
+    started = true;
+    userStartAudio();
   }
-  
+
   let hu = random(360);
-  fireworks.push(new Firework(x, y, hu));
 
-  // --- 关键修复：为你自己的烟花添加声音播放 ---
+  // 计算飞到点击位置所需的初速度 (v = sqrt(2 * g * distance))
+  let distance = height - y;
+  let gravityMag = 0.2; // 对应 gravity = createVector(0, 0.2)
+  let initialVel = -sqrt(2 * gravityMag * distance);
+
+  // 限制一下最小速度，防止点太低处没反应
+  initialVel = min(initialVel, -5);
+
+  fireworks.push(new Firework(x, initialVel, hu, y));
+
   const randomSound = random() > 0.5 ? fireworkSound1 : fireworkSound2;
-  if (randomSound.isLoaded()) { 
-    randomSound.play(); 
+  if (randomSound.isLoaded()) {
+    randomSound.play();
   }
-  // ---------------------------------------
 
-  // 2. 发送到服务器
   socket.emit('firework', { x: x, y: y, hu: hu });
 }
 
@@ -109,10 +113,11 @@ function touchStarted() {
 // --- 烟花与粒子类定义 ---
 
 class Firework {
-  constructor(x, y, hu) {
+  constructor(x, initialVel, hu, targetY) {
     this.hu = hu;
-    this.firework = new Particle(x, height, this.hu, true); // 从底部升起
-    this.targetY = y; // 目标高度
+    // 传递初速度给 Particle
+    this.firework = new Particle(x, height, this.hu, true, initialVel);
+    this.targetY = targetY;
     this.exploded = false;
     this.particles = [];
   }
@@ -125,8 +130,8 @@ class Firework {
     if (!this.exploded) {
       this.firework.applyForce(gravity);
       this.firework.update();
-      // 到达点击位置或向上速度消失时爆炸
-      if (this.firework.vel.y >= 0 || this.firework.pos.y <= this.targetY) {
+      // 判定逻辑：速度变慢或越过目标位置即爆炸
+      if (this.firework.vel.y >= -1 || this.firework.pos.y <= this.targetY) {
         this.exploded = true;
         this.explode();
       }
@@ -142,7 +147,9 @@ class Firework {
   }
 
   explode() {
-    for (let i = 0; i < 100; i++) {
+    // 手机端性能优化：粒子数从100降到40
+    let count = isMobile() ? 40 : 80;
+    for (let i = 0; i < count; i++) {
       const p = new Particle(this.firework.pos.x, this.firework.pos.y, this.hu, false);
       this.particles.push(p);
     }
@@ -159,17 +166,16 @@ class Firework {
 }
 
 class Particle {
-  constructor(x, y, hu, rocket) {
+  constructor(x, y, hu, rocket, initialVel) {
     this.pos = createVector(x, y);
     this.rocket = rocket;
     this.lifespan = 255;
     this.hu = hu;
-    this.delayCounter = rocket ? 0 : 60; // 非火箭粒子延迟60帧后开始消失
     if (this.rocket) {
-      this.vel = createVector(0, random(-12, -15));
+      this.vel = createVector(0, initialVel); // 使用计算出的动态速度
     } else {
       this.vel = p5.Vector.random2D();
-      this.vel.mult(random(2, 10));
+      this.vel.mult(random(2, 8)); // 爆炸范围稍微调小一点，增加紧凑感
     }
     this.acc = createVector(0, 0);
   }
@@ -180,13 +186,8 @@ class Particle {
 
   update() {
     if (!this.rocket) {
-      this.vel.mult(0.9); // 增加空气阻力
-      // 延迟计数器大于0时不减少寿命，否则开始淡出
-      if (this.delayCounter > 0) {
-        this.delayCounter--;
-      } else {
-        this.lifespan -= 4;
-      }
+      this.vel.mult(0.92); // 阻力稍大一点，减少长尾巴计算
+      this.lifespan -= 5;   // 消失速度加快，腾出内存
     }
     this.vel.add(this.acc);
     this.pos.add(this.vel);
@@ -198,13 +199,19 @@ class Particle {
   }
 
   show() {
+    colorMode(HSB);
     if (!this.rocket) {
       strokeWeight(2);
       stroke(this.hu, 255, 255, this.lifespan);
     } else {
-      strokeWeight(4);
+      strokeWeight(3);
       stroke(this.hu, 255, 255);
     }
     point(this.pos.x, this.pos.y);
   }
+}
+
+// 辅助函数：判断是否为手机
+function isMobile() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 }
