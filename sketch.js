@@ -3,6 +3,7 @@ let gravity;
 let fireworkSound1;
 let fireworkSound2;
 let started = false; // 用于iOS音频解锁状态
+let socket;
 
 function preload() {
   // 请确保你有一个声音文件在同目录下
@@ -12,6 +13,16 @@ function preload() {
 }
 
 function setup() {
+  // 连接到当前的服务器
+  socket = io(); 
+
+  // 监听来自其他人的烟花
+  socket.on('firework_blast', (data) => {
+    // 当收到别人发射的消息时，本地也执行发射函数
+    // 注意：这里需要确保 launchFirework 不会再次向外 emit，避免死循环
+    receiveRemoteFirework(data.x, data.y, data.hu);
+  });
+  
   // 1. 全屏显示
   createCanvas(windowWidth, windowHeight);
   colorMode(HSB);
@@ -50,30 +61,25 @@ function draw() {
 
 // 核心发射函数：处理震动、声音、视觉和通信
 function launchFirework(x, y) {
-  if (!started) {
-    started = true;
-    userStartAudio(); // 解锁浏览器音频上下文
-  }
-
-  // 3. 震动反馈 (Android 兼容)
-  if (navigator.vibrate) {
-    navigator.vibrate(50);
-  }
-
-  // 4. 随机播放两个声音之一
-  const randomSound = random() > 0.5 ? fireworkSound1 : fireworkSound2;
-  if (randomSound.isLoaded()) {
-    randomSound.play();
-  }
-
-  // 生成随机颜色的烟花
+  // 1. 本地逻辑
+  if (!started) { started = true; userStartAudio(); }
   let hu = random(360);
   fireworks.push(new Firework(x, y, hu));
 
-  // 5. 联网同步 (此处对接你的 Socket 服务器)
-  if (typeof socket !== 'undefined') {
-    socket.emit('firework', { x: x, y: y, hu: hu });
-  }
+  // 2. 发送到服务器
+  socket.emit('firework', { x: x, y: y, hu: hu });
+
+  // 播放声音和震动...
+}
+
+// 新增：专门处理远程同步的函数（不带 emit）
+function receiveRemoteFirework(x, y, hu) {
+  if (!started) return; // 如果还没点击过，可能由于浏览器政策无法播放声音
+  fireworks.push(new Firework(x, y, hu));
+
+  // 远程烟花的声音
+  const randomSound = random() > 0.5 ? fireworkSound1 : fireworkSound2;
+  if (randomSound.isLoaded()) { randomSound.play(); }
 }
 
 // 交互：鼠标点击
