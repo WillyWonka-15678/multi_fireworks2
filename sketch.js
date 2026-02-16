@@ -66,10 +66,17 @@ function launchFirework(x, y) {
   let hu = random(360);
   fireworks.push(new Firework(x, y, hu));
 
-  // 2. 发送到服务器
+  // 2. 播放声音（随机选择两个音效之一）
+  const randomSound = random() > 0.5 ? fireworkSound1 : fireworkSound2;
+  if (randomSound.isLoaded()) { randomSound.play(); }
+
+  // 3. 发送到服务器
   socket.emit('firework', { x: x, y: y, hu: hu });
 
-  // 播放声音和震动...
+  // 4. 震动反馈 (Android 兼容)
+  if (navigator.vibrate) {
+    navigator.vibrate(50);
+  }
 }
 
 // 新增：专门处理远程同步的函数（不带 emit）
